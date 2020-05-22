@@ -5,30 +5,20 @@ const request = require('request')
 const router = express.Router();
 
 
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: 'us-cdbr-east-06.cleardb.net',
     user: 'bfc148d01d2b40',
     password: 'eee07c6c',
-    database: 'heroku_5b4be569d534dc8'
-});
-//connect
-
-db.connect((err) => {
-    if (err) {
-        throw err
-    }
-    console.log('MySql Connected...');
-
+    database: 'heroku_5b4be569d534dc8',
 });
 
 
 //create db
 router.get('/createdb', (req, res) => {
-    let sql = 'CREATE DATABASE preshydb'
+    let sql = 'CREATE DATABASE users'
     db.query(sql, (err, result) => {
         if (err) throw err;
         console.log(result);
-
         res.send('Database created ...');
     })
 })
@@ -63,23 +53,16 @@ router.get('/populate', (req, res) => {
 
 });
 
-router.get('/delete', (req, res) => {
-    let sql = "SELECT * FROM users";
-    db.query(sql, function (err, result) {
+router.get('/deleteall', (req, res) => {
+    db.query("DELETE FROM users", function (err, result, fields) {
+        // if any error while executing above query, throw error
         if (err) throw err;
-        let sqls = `DELETE FROM users WHERE id = ${result.length}`;
-        let query = db.query(sqls, (err, resul) => {
-            if (err) throw err;
-            // console.log(resul);
-            res.send('user deleted....');
-
-        });
-
+        // if there is no error, you have the result
+        console.log(result);
+        res.send('all users deleted')
     });
-
-});
-
-
+})
+router.get('/signup', (req, res) => res.render('signup'));
 
 router.post('/signup', (req, res) => {
     let user = { name: req.body.name, username: req.body.username, email: req.body.email };
@@ -89,38 +72,19 @@ router.post('/signup', (req, res) => {
     });
 });
 
-router.get('/home', function (request, response) {
-    if (request.session.loggedin) {
-        response.send('Welcome back, ' + request.session.username + '!');
+router.get('/status', function (req, res) {
+    if (req.session.loggedin) {
+        res.status(200).json({ message: 'Logged in as ' + req.session.username + '!' });
     } else {
-        response.redirect('/login')
+        res.redirect('/login')
     }
-    response.end();
+    res.end();
 });
 
 router.get('/login', (req, res) => res.render('login'));
 
 router.post('/login', (req, res) => {
-    // try {
-    //     const { name, email } = req.body;
-    //     db.query('SELECT * FROM users WHERE email = ?', [name], async (error, results) => {
-    //         if (!results) {
-    //             res.send({
-    //                 message: "username or email is incorrect"
-    //             })
-    //         } else {
-    //             res.send({
-    //                 message: "logged in as " //+ results[0].name
-    //             })
-    //         }
-    //     });
-    //     // res.send({ name, email });
-    //     // console.log({ name, email });
 
-    // } catch (error) {
-    //     console.log(error);
-
-    // }
     var name = req.body.name;
     var email = req.body.email;
     if (name && email) {
@@ -128,9 +92,9 @@ router.post('/login', (req, res) => {
             if (results.length > 0) {
                 req.session.loggedin = true;
                 req.session.username = name;
-                res.redirect('/home');
+                res.redirect('/status');
             } else {
-                res.send('Incorrect Username and/or Password!');
+                res.status(400).json({ message: 'username or email is incorrect' });
             }
             res.end();
         });
@@ -138,6 +102,39 @@ router.post('/login', (req, res) => {
         res.send('Please enter Username and Password!');
         res.end();
     }
+});
+
+
+//delete user in last row
+router.get('/delete', (req, res) => {
+    let sql = 'delete from users order by id desc limit 1'
+    //    let sql = `DELETE FROM users WHERE id = ${req.params.id}`;
+    let query = db.query(sql, (err, result) => {
+        if (err) throw err;
+        console.log(result);
+        res.send('User in last row deleted....');
+
+    });
+});
+
+// //select single posts
+router.get('/getuser/:id', (req, res) => {
+    let sql = `SELECT * FROM users WHERE id = ${req.params.id}`;
+    let query = db.query(sql, async (err, result) => {
+        if (err) throw err;
+        res.status(200).json(result[0]);
+
+    });
+});
+
+//select users
+router.get('/getusers', (req, res) => {
+    let sql = 'SELECT * FROM users';
+    let query = db.query(sql, (err, results) => {
+        if (err) throw err;
+        res.send(results);
+        console.log('Users fetched....');
+    });
 });
 
 // router.get('/adduser', (req, res) => {
@@ -175,28 +172,6 @@ router.post('/login', (req, res) => {
 // });
 
 
-//select users
-router.get('/getusers', (req, res) => {
-    let sql = 'SELECT * FROM users';
-    let query = db.query(sql, (err, results) => {
-        if (err) throw err;
-        res.send(results);
-        console.log('Users fetched....');
-    });
-});
-
-// //select single posts
-router.get('/getuser/:id', (req, res) => {
-    let sql = `SELECT * FROM users WHERE id = ${req.params.id}`;
-    let query = db.query(sql, async (err, result) => {
-        //     if (err) throw err;
-        await result;
-        if (!result) {
-            res.send('no useer with that id')
-        }
-    });
-});
-
 // //update post
 // router.get('/updatepost/:id', (req, res) => {
 //     let newTitle = 'Updated Title';
@@ -208,17 +183,19 @@ router.get('/getuser/:id', (req, res) => {
 
 //     });
 // });
+// router.get('/delete', (req, res) => {
+//     let sql = `DELETE FROM users WHERE id=(SELECT MAX(id) FROM users)`;
+//     let query = db.query(sql, (err, result) => {
+//         if (err) throw err;
+//         console.log(result);
+//         res.send('Last User deleted....');
 
-// //delete post
-// router.get('/deletepost/:id', (req, res) => {
-//     let newTitle = 'Updated Title';
-// let sql = `DELETE FROM posts WHERE id = ${req.params.id}`;
-// let query = db.query(sql, (err, result) => {
-//     if (err) throw err;
-//     console.log(result);
-//     res.send('Post deleted....');
+//     });
+// });
 
-// });
-// });
+
+// to combact the error "unhandled error PROTOCOL_CONNECTION LOST"
+db.query('select 1 + 1', (err, rows) => { /* */ });
+
 
 module.exports = router

@@ -11,7 +11,10 @@ const bodyParser = require('body-parser');
 app.use(session({
     secret: 'secret',
     resave: true,
-    saveUninitialized: true
+    saveUninitialized: true,
+    cookie: {
+        maxAge: 1000 * 60 * 60 * 24 * 365
+    }
 }));
 
 app.use(bodyParser.urlencoded({ extended: false }))
